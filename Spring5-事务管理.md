@@ -16,12 +16,13 @@
 - 在事务内部统一调度资源一节，为大家描述了在一个事务处理的过程中，应用程序代码如何确保各种资源被恰当的创建、重用和清理
 - 声明式事务管理一节，为大家讲解Spring框架如何支持您完成声明式事务编程
 - 编程式事务管理一节，包含了Spring框架如何支持您在自己的编写的程序代码里面实现编程式事务的内容
-- 事务绑定事件一节，将会告诉您，应该怎样在一个事物内部使用应用事件
+- 绑定事务事件一节，将会告诉您怎样在针对一个已经存在的事务，在应用程序中绑定、监听与之有关的事件
 
 ## 13.2 Spring框架事务模型的优势
 
-Traditionally, Java EE developers have had two choices for transaction management: global or local transactions, both of which have profound limitations. Global and local transaction management is reviewed in the next two sections, followed by a discussion of how the Spring Framework’s transaction management support addresses the limitations of the global and local transaction models.
+一直以来，Java企业级开发者在数据库事务管理的问题上有两个选择：全局事务或者是本地事务。这两种方案都有非常严重的局限和不足。
 
+接下来两个小节，本文将重新审视全局事务和本地事务，继之以对一个问题的简单讨论：Spring框架的事务模型如何支持您克服全局事务和本地事务的局限与不足？
 
 ### 13.2.1 全局事务
 
