@@ -26,17 +26,18 @@
 
 ### 13.2.1 全局事务
 
-Global transactions enable you to work with multiple transactional resources, typically relational databases and message queues. The application server manages global transactions through the JTA, which is a cumbersome API to use (partly due to its exception model). Furthermore, a JTA UserTransaction normally needs to be sourced from JNDI, meaning that you also need to use JNDI in order to use JTA. Obviously the use of global transactions would limit any potential reuse of application code, as JTA is normally only available in an application server environment.
+借助于全局事务，你可以同时操作多个 事务资源，最经典的资源就是关系型数据库和消息队列。应用服务器通过JTA（Java Transaction Interface）管理全局事务；归因于它的异常模型，JTA是一种非常那冗长繁杂的应用编程接口（API）。更加值得注意的是，JTA的用户事务（UserTransaction）正常情况下都来源于JNDI，也就是说，如果你打算使用JTA，那么你就必须使用JNDI。很显然，采用全局事务会大大限制你的应用程序代码被复用，因为只有在使用应用服务器环境的时候，你才能使用JTA。
 
-Previously, the preferred way to use global transactions was via EJB CMT (Container Managed Transaction): CMT is a form of declarative transaction management (as distinguished from programmatic transaction management). EJB CMT removes the need for transaction-related JNDI lookups, although of course the use of EJB itself necessitates the use of JNDI. It removes most but not all of the need to write Java code to control transactions. The significant downside is that CMT is tied to JTA and an application server environment. Also, it is only available if one chooses to implement business logic in EJBs, or at least behind a transactional EJB facade. The negatives of EJB in general are so great that this is not an attractive proposition, especially in the face of compelling alternatives for declarative transaction management.
+在之前，使用全局事务的最优方法是借助于EJB容器支持的事务（Container Managed Transaction）：不同于编程式事务管理，CMT是一种声明式事务管理。基于EJB容器的事务管理免除了与事务相关的JNDI查找，虽说使用EJB容器本身就必须要用到JNDI查找。采用这种做法，你就可以尽量少的通过Java代码控制事务。CMT方案本身与JTA和应用服务器环境紧密关联，这是它的一个很明显的弊端。另外，只有当你在EJB（Enterprise Java Bean）里面，或者是在一个事务性的EJB门面背后实现业务逻辑, 你才有机会使用这种方案（EJB CMT）。相比于其他那些引人入胜的声明式事务管理方案，EJB CMT的巨大的负面效应使得它不再是为一个有吸引力的选项。
 
 ### 13.2.2 本地事务
 
-Local transactions are resource-specific, such as a transaction associated with a JDBC connection. Local transactions may be easier to use, but have significant disadvantages: they cannot work across multiple transactional resources. For example, code that manages transactions using a JDBC connection cannot run within a global JTA transaction. Because the application server is not involved in transaction management, it cannot help ensure correctness across multiple resources. (It is worth noting that most applications use a single transaction resource.) Another downside is that local transactions are invasive to the programming model.
+本地事务和事务资源类型紧密相关，比如说与JDBC关联的事务。本地事务易于使用，但是也有明显的不足：它不能跨越多个事务资源。举个例子，关联JDBC连接的事务就不能在一个全局JTA事物里面运行。由于应用服务器没有参与事务管理，它就不能确保多个事务资源情形下应用程序的正确性（此处值得一提的是，大都多数应用只需要用到一个事务资源）。本地事务的另一个缺点是，它对于原有编程模型的的入侵性很强。
+
 
 ### 13.2.3 一致的事务编程模型
 
-Spring resolves the disadvantages of global and local transactions. It enables application developers to use a consistent programming model in any environment. You write your code once, and it can benefit from different transaction management strategies in different environments. The Spring Framework provides both declarative and programmatic transaction management. Most users prefer declarative transaction management, which is recommended in most cases.
+Spring框架可以成功化解全局事务和本地事务的不足之处。它帮助用用程序开发者在任何环境下都可以使用一致的编程模型。你只要写一次代码，就可以轻易受益于不同环境中不同的事务管理策略。Spring框架为您提供了声明式和编程式事务管理方案。多数框架用户倾向于采用编程的办法管理事务。我们也推荐大家在多数情况下这么做。
 
 With programmatic transaction management, developers work with the Spring Framework transaction abstraction, which can run over any underlying transaction infrastructure. With the preferred declarative model, developers typically write little or no code related to transaction management, and hence do not depend on the Spring Framework transaction API, or any other transaction API.
 
