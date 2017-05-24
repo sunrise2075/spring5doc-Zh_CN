@@ -77,9 +77,128 @@ Spring框架可以成功化解全局事务和本地事务的不足之处。它�
 
 - 传播属性（Propagation）： 通常来说，在一个事务作用域里运行的所有代码只会在这个事务内部产生效果。然而，假如已经存在一个事务上下文，你可以通过隔离级别这个选项定义当前事务方法的具体行为。比如说，常见的情况下，事务方法的代码可以继续运行于当前这个已经存在的事务上下文；或者是，中止这个事务上下文，重新创建一个事务。Spring框架为您提供了与EJB容器事务（EJB CMT， container managed transaction）一样的全部隔离级别选项。需要了解Spring框架事务隔离级别语义的朋友，可以参考 13.5.7  “Transaction propagation”
 
+- 超时（Timeout）：在超时或者是被底层事务基础设施自动回滚之前，当前事务可以运行多长时间？
 
+- 只读状态（Read Only Status）： 如果你的代码只是读取数据，但是不会写入数据，那么你就会用到只读事务。在某些情形下，比如Hibernate，只读事务是一种非常有用的优化。
 
-## 13.4 调度与事务有关的全部资源
+以上这些配置反映了一些标准的事务概念。如果有需要，您可以参考其他一些讨论事务隔离级别和核心概念的材料。理解这些概念，无论对于使用Spring框架，还是其他任何事务管理方案，都很有必要。
+
+The TransactionStatus interface provides a simple way for transactional code to control transaction execution and query transaction status. The concepts should be familiar, as they are common to all transaction APIs:
+
+代表事务状态的`TransactionStatus`接口为应用程序代码提供了控制事务执行和查询事务状态的简单途径。对于不同的事务管理API，这些概念都非常相似：
+
+    public interface TransactionStatus extends SavepointManager {
+    
+    	boolean isNewTransaction();
+    
+    	boolean hasSavepoint();
+    
+    	void setRollbackOnly();
+    
+    	boolean isRollbackOnly();
+    
+    	void flush();
+    
+    	boolean isCompleted();
+    
+    }
+
+Regardless of whether you opt for declarative or programmatic transaction management in Spring, defining the correct PlatformTransactionManager implementation is absolutely essential. You typically define this implementation through dependency injection.
+
+无论选择Spring的声明式事务管理或者编程式事务管理，你绝对有必要定义一个正确的`PlatformTransactionManager`实现。你通常可以通过依赖注入来定义这个实现。
+
+PlatformTransactionManager implementations normally require knowledge of the environment in which they work: JDBC, JTA, Hibernate, and so on. The following examples show how you can define a local PlatformTransactionManager implementation. (This example works with plain JDBC.)
+
+定义一个事务管理器`PlatformTransactionManager`的具体实现，你需要知道与事务管理器所在工作环境有关的知识：JDBC，JTA，Hibernate， 或者其他什么。下面的例子向你展示了如何定义一个本地事务管理器的具体实现。（它可以与JDBC一起工作）。
+
+你要先定义一个JDBC数据源：
+
+    <bean id="dataSource" class="org.apache.commons.dbcp.BasicDataSource" destroy-method="close">
+    	<property name="driverClassName" value="${jdbc.driverClassName}" />
+    	<property name="url" value="${jdbc.url}" />
+    	<property name="username" value="${jdbc.username}" />
+    	<property name="password" value="${jdbc.password}" />
+    </bean>
+
+相关的事务管理器`PlatformTransactionManager`的Java Bean定义需要引用上面的数据源定义。就像这样：
+
+    <bean id="txManager" class="org.springframework.jdbc.datasource.DataSourceTransactionManager">
+    	<property name="dataSource" ref="dataSource"/>
+    </bean>
+
+If you use JTA in a Java EE container then you use a container DataSource, obtained through JNDI, in conjunction with Spring’s JtaTransactionManager. This is what the JTA and JNDI lookup version would look like:
+
+倘若选用了JavaEE容器，与一个Spring框架提供的JTA事务管理器`JtaTransactionManager`一起，你还得用到通过JNDI查找到的容器数据源。想要定义一个JNDI版本的JTA事务管理器，你应该按照下面的样子做：
+
+    <?xml version="1.0" encoding="UTF-8"?>
+    <beans xmlns="http://www.springframework.org/schema/beans"
+    	xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    	xmlns:jee="http://www.springframework.org/schema/jee"
+    	xsi:schemaLocation="
+    		http://www.springframework.org/schema/beans
+    		http://www.springframework.org/schema/beans/spring-beans.xsd
+    		http://www.springframework.org/schema/jee
+    		http://www.springframework.org/schema/jee/spring-jee.xsd">
+    
+    	<jee:jndi-lookup id="dataSource" jndi-name="jdbc/jpetstore"/>
+    
+    	<bean id="txManager" class="org.springframework.transaction.jta.JtaTransactionManager" />
+    
+    	<!-- other <bean/> definitions here -->
+    
+    </beans>
+
+上面的JTA事务管理器`JtaTransactionManager`不需要直接引用数据源或者是任何其他资源，原因是：它使用了Java企业容器的全局事务管理基础设施。
+
+> ![[Note]](http://i.imgur.com/GDinJMk.png)上面的数据源定义用到了jee命名空间的<jndi-lookup/>标签。需要了解更多有关基于schema方案的配置文件的信息，你可以查看 38章XML：基于schema方案的XML配置。需要了解更多jee命名空间标签的信息，请查看38章里面的38.2.3.“jee方案”一小节。
+
+参考下面的例子，你也可以轻松地使用Hibernate本地事务。此时你需要定义一个Hibernate的本地session工厂`LocalSessionFactoryBean`，你的应用代码会通过它获取Hibernate的session实例。
+
+这里的数据源定义方法与之前展示的本地JDBC数据源相同，因此不再赘述。
+
+> ![[Note]](http://i.imgur.com/GDinJMk.png)那些被非JTA的事务管理器使用到的，通过JNDI查找、由Java企业容器管理的数据源，必须是非事务性的。因为，Spring框架（而不是Java企业容器）将会管理这些事务。
+
+此处，名称为`txManager`的Java Bean的类型是`HibernateTransactionManager`。与`DataSourceTransactionManager`需要指向一个数据源类似，`HibernateTransactionManager`需要指向一个`SessionFactory`（会话工厂）实例。
+
+    <bean id="sessionFactory" class="org.springframework.orm.hibernate5.LocalSessionFactoryBean">
+    	<property name="dataSource" ref="dataSource"/>
+    	<property name="mappingResources">
+    		<list>
+    			<value>org/springframework/samples/petclinic/hibernate/petclinic.hbm.xml</value>
+    		</list>
+    	</property>
+    	<property name="hibernateProperties">
+    		<value>
+    			hibernate.dialect=${hibernate.dialect}
+    		</value>
+    	</property>
+    </bean>
+    
+    <bean id="txManager" class="org.springframework.orm.hibernate5.HibernateTransactionManager">
+    	<property name="sessionFactory" ref="sessionFactory"/>
+    </bean>
+
+如果你选用了Hibernate和由Java企业容器管理的JTA事务管理方案，你只需如之前基于JDBC数据源的JTA事务管理器的例子代码那样，轻松地使用`JtaTransactionManager`。
+
+    <bean id="txManager" class="org.springframework.transaction.jta.JtaTransactionManager"/>
+
+> ![[Note]](http://i.imgur.com/GDinJMk.png)  如果选择了JTA事务，那么，无论底层你采用什么数据访问技术，事务管理器的定义看起来都没有两样。因为存在这样明显的一个事实：JTA事务是全局事务，全局事务会囊括所有的事务资源。
+
+在以上所有的情况里，你都无需改动应用程序代码。只需要修改配置，你就可以改动事务管理方案。哪怕你在本地事务和全局事务来回切换的时候也可以这样。
+
+## 13.4 在事务里面同步资源
+
+你现在已经很清楚，如何创建不同的事务管理器、把它们跟那些需要被同步到事务的资源（比如说`DataSourceTransactionManager`与一个`JDBC`数据源一起，`HibernateTransactionManager`与一个`Hibernate`的`SessionFactory`会话工厂，等等，诸如此类）关联起来。这一小节将要描述，直接或者间接使用了比如JDBC、Hibernate或者JPA这类持久化API的应用程序代码，在事务管理的过程中，如何确保这些资源被恰当地创建、重用以及清理。这一小节也会讨论如何通过有关的`PlatformTransactionManager`（事务管理器）触发事务同步。
+
+### 13.4.1 位于更高层次的事务资源同步方法
+
+这种广为接受的做法，或者是集成了Spring框架最高层次的基于模板的持久化API，或者是把对象关系映射框架的内部API跟
+明确了事务上下文的工厂Bean或是代理对象联合在一起来管理本地资源工厂。这些具备明确的事务上下文的方案，从内部处理好了资源的创建、重用、清理，（可选的）事务的资源同步，还有异常映射。因而，用户的数据访问代码无需关注此类底层任务，只需专心处理好非样板的（non-boilerplate）的数据持久化逻辑。一般的，在借助`JdbcTemplate`来完成JDBC访问的时候，你就是在使用对象关系映射框架（ORM）的本地API和基于模板的办法。本参考文档会在接下来的几个章节里面详细论述这些做法。
+
+### 13.4.2 位于更低层次的事务资源同步方法
+
+诸如`DataSourceUtils`（针对JDBC），`EntityManagerFactoryUtils`（针对JPA），`SessionFactoryUtils`（针对Hibernate）之类的Class类型存在于更低的抽象层面。在需要让应用程序代码直接处理原生（最底层）持久化API这种类型的资源时，你可以用这些Class类型来确定地获取到由Spring框架管理的对象实例，此时此刻，事务的资源被同步好了（如果需要），发生在这个过程的资源也会被恰当地映射到一个一致的API。
+
 
 ## 13.5 声明式事务管理
 
@@ -95,3 +214,4 @@ Spring框架可以成功化解全局事务和本地事务的不足之处。它�
 
 ## 12.11 更多资源
 
+.
