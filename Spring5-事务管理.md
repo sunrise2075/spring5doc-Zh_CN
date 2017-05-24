@@ -37,21 +37,47 @@
 
 ### 13.2.3 一致的事务编程模型
 
-Spring框架可以成功化解全局事务和本地事务的不足之处。它帮助用用程序开发者在任何环境下都可以使用一致的编程模型。你只要写一次代码，就可以轻易受益于不同环境中不同的事务管理策略。Spring框架为您提供了声明式和编程式事务管理方案。多数框架用户倾向于采用编程的办法管理事务。我们也推荐大家在多数情况下这么做。
+Spring框架可以成功化解全局事务和本地事务的不足之处。它帮助应用程序开发者在任何环境下都使用一致的编程模型。你只要写一次代码，就可以轻易受益于不同环境中不同的事务管理策略。Spring框架为您提供了声明式和编程式事务管理方案。多数框架用户倾向于采用编程的办法管理事务。我们也推荐大家在多数情况下这么做。
 
-With programmatic transaction management, developers work with the Spring Framework transaction abstraction, which can run over any underlying transaction infrastructure. With the preferred declarative model, developers typically write little or no code related to transaction management, and hence do not depend on the Spring Framework transaction API, or any other transaction API.
+对于编程式事务管理，开发人员要用到**Spring框架的事务抽象层**————它运行于任何一种底层的事务基础框架之上。作为一种备受偏爱的声明模型，（在使用过程中）开发者只需要很少、甚至完全无需编写与事务管理有关的代码。因而他们也无需依赖Spring框架的事务编程接口（API），和其他的任何一种事务编程接口API。
 
-> Do you need an application server for transaction management?
+> 你需要一个应用服务器进行事务管理吗？
 > 
-> The Spring Framework’s transaction management support changes traditional rules as to when an enterprise Java application requires an application server.
+> Spring框架对事务管理的支持改变了一件由来已久的事情：究竟何时，一个Java应用程序必须要在应用服务器（Application Server）上面运行？
 > 
-> In particular, you do not need an application server simply for declarative transactions through EJBs. In fact, even if your application server has powerful JTA capabilities, you may decide that the Spring Framework’s declarative transactions offer more power and a more productive programming model than EJB CMT.
+> 特别值得指出，如果只是想要通过EJB实现声明式事务，你完全无须应用服务器。实际上，就算你的应用服务器已经具备强大的JTA能力，你仍旧有机会选择Spring框架的声明式事务管理（因为，比起基于EJB容器的事务，这是一种更加强大和高效的编程模型）
 > 
-> Typically you need an application server’s JTA capability only if your application needs to handle transactions across multiple resources, which is not a requirement for many applications. Many high-end applications use a single, highly scalable database (such as Oracle RAC) instead. Standalone transaction managers such as Atomikos Transactions and JOTM are other options. Of course, you may need other application server capabilities such as Java Message Service (JMS) and Java EE Connector Architecture (JCA).
+> 在最一般的情况下，只有需要实现跨越多个资源事务管理时，你才真正需要用到应用服务器的JTA支持。然而，大多数应用并没有这个需求。相反，许多高端的应用只需用到单一的、高度可扩展的数据库（例如Oracle RAC）。像Atomikos和JOTM之类独立的事务管理器也是可选方案。当然，我们不排除下面这样的可能：你还需要用到应用服务器的其他能力，比如Java消息服务（Java Message Service，JMS）或者Java企业连接器结构（Java EE Connector Architecture，JCA）。
 > 
-> The Spring Framework gives you the choice of when to scale your application to a fully loaded application server. Gone are the days when the only alternative to using EJB CMT or JTA was to write code with local transactions such as those on JDBC connections, and face a hefty rework if you need that code to run within global, container-managed transactions. With the Spring Framework, only some of the bean definitions in your configuration file, rather than your code, need to change.
+> Spring框架可以给您提供选择：什么时候把自己的应用扩展到一个满负荷运行的应用服务器上。The Spring Framework gives you the choice of when to scale your application to a fully loaded application server. 在过去，你只能基于EJB的容器事务或者JTA来编写JDBC本地事务；想要要在全局事务或者EJB容器事务中运行应用，你就必须重新修改代码。Gone are the days when the only alternative to using EJB CMT or JTA was to write code with local transactions such as those on JDBC connections, and face a hefty rework if you need that code to run within global, container-managed transactions.有了Spring框架，你只需要在配置文件里面修改Java bean的定义。 With the Spring Framework, only some of the bean definitions in your configuration file, rather than your code, need to change.
 
 ## 13.3 理解Spring框架如何抽象地看待一切事务
+
+理解Spring框架事务管理抽象层的关键是：领会**事务策略**的概念。在Spring框架中，事务策略由名称是`org.springframework.transaction.PlatformTransactionManager`的Java接口定义：
+
+    public interface PlatformTransactionManager {
+    
+    	TransactionStatus getTransaction(
+    			TransactionDefinition definition) throws TransactionException;
+    
+    	void commit(TransactionStatus status) throws TransactionException;
+    
+    	void rollback(TransactionStatus status) throws TransactionException;
+    }
+
+虽说你可以在自己的应用代码编程过程中使用它，但它的作用主要是一个对外提供事务服务的接口（service provider interface，SPI）。正因为是接口，你可以轻松地（当然是必要的时候）为它制作模拟对象和测试桩。它没有跟诸如JNDI这样的查找策略策略邦定。在Spring的依赖注入（Ioc）容器中，`PlatformTransactionManager`的具体实现就像其他任何对象、Java bean一样被定义。就这一点，即使在采用JTA作为持久化方案的情况下，也能够保证Spring框架的事务管理成为一个有价值的抽象层，。比起你直接用到JTA，这样做（使用Spring框架）也会让你的代码更容易测试。
+
+为了与Spring框架的哲学保持一致，由PlatformTransactionManager接口中每一个方法抛出的异常TransactionException是一种非受检异常（unchecked exception）。换句话说，它扩展了Java基础类库的Class：`java.lang.RuntimeException`。法正在在事务管理的基础设施框架中的失败无一例外都是严重的错误。在极少出现的情况下，应用程序代码可以从事务失败中恢复，应用程序的开发者可以选择捕获并且处理此类事务异常`TransactionException`。重要的一点是，开发者不会被强制要求这么做。
+
+依赖于一个`TransactionDefinition`类型参数，`getTransaction(..)`方法会返回一个代表事务状态的`TransactionStatus`类型对象。这里的事务状态对象，通常代表一个新的事物，或是一个已经存在的事务（条件是：在现有的调用栈里面存在一个与传入参数匹配的事务定义）。这里所说的第二种情况的具体含义是，在Java EE的事务上下文里，表示事物状态的`TransactionStatus`对象跟一个正在运行事务的程序线程紧密关联。
+
+`TransactionDefinition`接口定义了下面的几项内容：
+
+- 隔离级别（Isolation）：当前事务与其他事务所从事的工作的隔离程度。比如说，现在这个事务能否看到其他事务尚未提交的写入？
+
+- 传播属性（Propagation）： 通常来说，在一个事务作用域里运行的所有代码只会在这个事务内部产生效果。然而，假如已经存在一个事务上下文，你可以通过隔离级别这个选项定义当前事务方法的具体行为。比如说，常见的情况下，事务方法的代码可以继续运行于当前这个已经存在的事务上下文；或者是，中止这个事务上下文，重新创建一个事务。Spring框架为您提供了与EJB容器事务（EJB CMT， container managed transaction）一样的全部隔离级别选项。需要了解Spring框架事务隔离级别语义的朋友，可以参考 13.5.7  “Transaction propagation”
+
+
 
 ## 13.4 调度与事务有关的全部资源
 
