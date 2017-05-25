@@ -199,8 +199,164 @@ If you use JTA in a Java EE container then you use a container DataSource, obtai
 
 诸如`DataSourceUtils`（针对JDBC），`EntityManagerFactoryUtils`（针对JPA），`SessionFactoryUtils`（针对Hibernate）之类的Class类型存在于更低的抽象层面。在需要让应用程序代码直接处理原生（最底层）持久化API这种类型的资源时，你可以用这些Class类型来确定地获取到由Spring框架管理的对象实例，此时此刻，事务的资源被同步好了（如果需要），发生在这个过程的资源也会被恰当地映射到一个一致的API。
 
+For example, in the case of JDBC, instead of the traditional JDBC approach of calling the getConnection() method on the DataSource, you instead use Spring’s org.springframework.jdbc.datasource.DataSourceUtils class as follows:
+比如JDBC为例，无需按照传统的做法在数据源对象上调用`getConnection()`方法，你只要按照下面的样子使用`org.springframework.jdbc.datasource.DataSourceUtils`Class类型：
+
+    Connection conn = DataSourceUtils.getConnection(dataSource);
+
+倘若当前存在的事务已经与一个数据源与之关联，那么数据源对象会被返回；否则，调用此方法会触发创建一个新数据源，和当前事务关联数据源（可选）的过程；在之后的事务调用过程中这个数据源将会被重复使用。正如之前提到过的，所有发生在这里的的`SQLException`都会被包装成为Spring框架所提供的`CannotGetJdbcConnectionException`，这是一种位于由Spring框架封装的异常类型`DataAccessExceptions`的层次结构上的非受检异常。比起得到单纯的`SQLException`类型异常，这种做法不但可以为你提供更丰富的信息，而且还能够保证应用代码在不同数据库、不同的持久化技术之间的可移植性。
+
+在没有Spring事务管理（非必须的事务资源同步）的情况下，这种做法仍然有效。所以无论是否采用Spring事务管理，你都可以使用这种做法。
+
+当然，在引入了Spring框架的JDBC支持、JPA支持或者是Hibernate支持以后，一般来说你都不会继续倾向使用`DataSourceUtils`这样的Class类型或是其他帮助类。道理很简单，比起直接操作由Spring框架封装在底层的API，面向Spring框架抽象层会让你的工作过程更开心。
+
+### 13.4.3 TransactionAwareDataSourceProxy
+
+类型为`TransactionAwareDataSourceProxy`的Class类型存在于更低的框架层次上。它不但是目标数据源的代理，而且在封装目标数据源的基础上，为数据源定义了明确具体的Spring事务上文。从这个意义上说，它和Java企业容器的事务性JNDI数据源相似之处。
+
+除非是一定要给现有的应用程序代码传入一个严格的JDBC数据源的实现，使用这个Class的做法就不只是没必要，而且也不可取。在使用了这个Class类型的情况下，也许你的代码能用，但是参与Spring框架的事务管理就成问题了。更好的做法是，你应该像之前提到过的那样，在更高的抽象层次上写自己的代码。
 
 ## 13.5 声明式事务管理
+
+> ![[Note]](http://i.imgur.com/GDinJMk.png)大多数Spring框架的用户都会选择声明式事务管理。这样做对应用程序代码的侵入性最小，与非侵入轻量级容器的观念能够最大程度保持一致。
+
+Spring框架的声明式事务是因为Spring的面向切面编程（AOP）功能才成为可能。事实上，由于事务切面代码已经和Spring框架一起发布，并且被以样板的风格使用，在有效的使用事务切面代码的过程中，你基本上无须理解AOP的概念。
+
+与EJB的容器事务很相似，你可以Spring声明式事务管理中规定具体某一个方法的事务行为（当然也可以不这样做）。必要的话，你还可以在事务上下文调用`setRollbackOnly()`。以上两种类型事务的区别是：
+
+- EJB的容器事务与JTA紧密联系。不同的是，Spring框架的声明式事务可以在任何环境下工作。后者不但可以与JTA一起工作，而且只需简单的调整配置文件，它就可以同样适用JDBC、JPA或Hibernate的本地事务。
+- 你可以把Spring声明式事务应用在任何一种Class上面，而不仅仅是EJB这样特殊的Class类型。
+- Spring框架提供了声明式事务的回滚规则的定义方法，EJB没有提供类似功能。无论是编程式事务还是声明式事务，Spring都支持对回滚规则的配置。
+- 借助于APO，Spring框架可以让你自定义事务的行为。比如说，你可以在事务回滚的时候插入自定义行为。除了切面上事务性的Advice，你也可以在切面上增加其他任意类型Advice。对于EJB事务容器中，除了调用`setRollbackOnly()`方法，你无法干预容器的事务管理过程。
+- 与高端的应用服务器不一样，在多次远程调用之间，Spring框架不支持事务上下文的传播属性。如果需要这个特性，那么我们推荐您使用EJB。在正常情况下，我们不需要一个事务跨越多次远程调用。
+
+> `TransactionProxyFactoryBean`在哪里出现呢?
+> 
+> 在2.0版本以上的Spring框架当中配置声明式事务，与更早版本的Spring大有不同。最主要的区别就是：再也不需要配置`TransactionProxyFactoryBean`了。
+> 
+> 早于2.0版本的Spring配置方法依然有效。你只需简单地把后来的`<tx:tags/>`标签当做为你一次性定义好`TransactionProxyFactoryBean`就行了。 
+
+回滚规则的概念很重要：由此，你可以定义在出现那种异常（exceptions，包括throwables类型对象）的情况下，现有事务将会自动回滚。你需要在配置文件里，而非代码里面声明回滚规则。这样做，你还是能够通过调用`TransactionStatus`对象上的`setRollbackOnly()`来回滚当前事务；更常见的情况是，你可以定义一个规则：当事务过程抛出`MyApplicationException`（一种由您自己扩展的非受检异常）类型异常的时候，当前事务会自动回滚。这么做的好处是，业务对象无需依赖于底层的事务管理基础设施；比如，通常不必引入Spring的事务管理API或是其它类型的SpringAPI。
+
+虽然EJB容器的默认行为是在发生系统异常（通常是运行时异常，runtime exception）的时候自动回滚事务，但EJB容器事务在遇到应用异常（通常是除`java.rmi.RemoteException`类型以外的受检异常）的时候却不会自动回滚事务。Spring声明式事务管理的默认行为是遵从EJB的规范（也就是说，只有发生非受检异常的时候才会自动回滚事务），与此同时，定制这个行为非常在实际编程中很有用处。
+
+### 13.5.1 理解Spring框架声明式事务的实现
+
+想要简单地告诉你说用`@Transactional`标注自定义Class，用`@EnableTransactionManagement`标注你的配置Class类就期望你理解如何进行事务管理，这样做肯定是不行的。下面这个小节将会向你介绍Spring框架声明式事务管理基础设施的内部工作原理，以期明了一些与事务有关的问题。
+
+需要你牢牢掌握的最重要的概念是，Spring框架对声明式事务的支持是借助于通过AOP（Aspect Oriented Programming，面向切面编程）代理实现，其中对切面事务性的建议（Advice）由元数据定义（目前主要是基于XML文件或者基于标注的元数据）。把AOP和定义事务的元数据结合在一起诞生了一个AOP代理；这个代理需要用到一个`TransactionInterceptor`类型的事务拦截器、一个合适的`PlatformTransactionManager`类型事务管理器的具体实现在多次方法调用之间驱动有关事务。
+
+> ![[Note]](http://i.imgur.com/GDinJMk.png)“Spring AOP”在[第7章 Spring面向切面编程]()有深入讲解。
+
+从概念上来看，调用一个事务代理的过程就像下面这样：
+
+![tx](http://i.imgur.com/Ki82CLw.png)
+
+### 13.5.2 声明式事务实现样例
+Foo
+设想有下面这样的接口以及随之而来的接口实现。这个例子采用`Foo`和`Bar`作为Class占位符，你只要集中注意力在事物的使用上，而不必去关注具体的领域模型。服务于这个样例的目的，`DefaultFooService`接口里面每一个方法体实现都会抛出一个`UnsupportedOperationException`类型的对象实例。这样你就可以看到事务被创建的过程，还有再抛出`UnsupportedOperationException`类型异常的时候事务如何自动回滚。
+
+    // the service interface that we want to make transactional
+    
+    package x.y.service;
+    
+    public interface FooService {
+    
+    	Foo getFoo(String fooName);
+    
+    	Foo getFoo(String fooName, String barName);
+    
+    	void insertFoo(Foo foo);
+    
+    	void updateFoo(Foo foo);
+    
+    } 
+
+    // an implementation of the above interface
+    
+    package x.y.service;
+    
+    public class DefaultFooService implements FooService {
+    
+    	public Foo getFoo(String fooName) {
+    		throw new UnsupportedOperationException();
+    	}
+    
+    	public Foo getFoo(String fooName, String barName) {
+    		throw new UnsupportedOperationException();
+    	}
+    
+    	public void insertFoo(Foo foo) {
+    		throw new UnsupportedOperationException();
+    	}
+    
+    	public void updateFoo(Foo foo) {
+    		throw new UnsupportedOperationException();
+    	}
+    
+    }
+
+假设`FooService`接口的前两个方法，也就是`getFoo(String)`和`getFoo(String, String)`继续运行于具有只读语义的事务上下文中，并且另外两个方法，也就是`insertFoo(Foo)`和`updateFoo(Foo)`，必须运行于具有读写语义的事务上下文中。接下来的几个段落将会详细的解释如下配置文件的含义：
+
+    <!-- from the file 'context.xml' -->
+    <?xml version="1.0" encoding="UTF-8"?>
+    <beans xmlns="http://www.springframework.org/schema/beans"
+    	xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    	xmlns:aop="http://www.springframework.org/schema/aop"
+    	xmlns:tx="http://www.springframework.org/schema/tx"
+    	xsi:schemaLocation="
+    		http://www.springframework.org/schema/beans
+    		http://www.springframework.org/schema/beans/spring-beans.xsd
+    		http://www.springframework.org/schema/tx
+    		http://www.springframework.org/schema/tx/spring-tx.xsd
+    		http://www.springframework.org/schema/aop
+    		http://www.springframework.org/schema/aop/spring-aop.xsd">
+    
+    	<!-- this is the service object that we want to make transactional -->
+    	<bean id="fooService" class="x.y.service.DefaultFooService"/>
+    
+    	<!-- the transactional advice (what 'happens'; see the <aop:advisor/> bean below) -->
+    	<tx:advice id="txAdvice" transaction-manager="txManager">
+    		<!-- the transactional semantics... -->
+    		<tx:attributes>
+    			<!-- all methods starting with 'get' are read-only -->
+    			<tx:method name="get*" read-only="true"/>
+    			<!-- other methods use the default transaction settings (see below) -->
+    			<tx:method name="*"/>
+    		</tx:attributes>
+    	</tx:advice>
+    
+    	<!-- ensure that the above transactional advice runs for any execution
+    		of an operation defined by the FooService interface -->
+    	<aop:config>
+    		<aop:pointcut id="fooServiceOperation" expression="execution(* x.y.service.FooService.*(..))"/>
+    		<aop:advisor advice-ref="txAdvice" pointcut-ref="fooServiceOperation"/>
+    	</aop:config>
+    
+    	<!-- don't forget the DataSource -->
+    	<bean id="dataSource" class="org.apache.commons.dbcp.BasicDataSource" destroy-method="close">
+    		<property name="driverClassName" value="oracle.jdbc.driver.OracleDriver"/>
+    		<property name="url" value="jdbc:oracle:thin:@rj-t42:1521:elvis"/>
+    		<property name="username" value="scott"/>
+    		<property name="password" value="tiger"/>
+    	</bean>
+    
+    	<!-- similarly, don't forget the PlatformTransactionManager -->
+    	<bean id="txManager" class="org.springframework.jdbc.datasource.DataSourceTransactionManager">
+    		<property name="dataSource" ref="dataSource"/>
+    	</bean>
+    
+    	<!-- other <bean/> definitions here -->
+    
+    </beans>
+
+检查上面的配置文件：你为自己的服务对象（名称为fooService的Bean）定义了事务支持。应用于此处的事务语义被封装于写法为`<tx:advice/>`的标签里面。这个标签的定义可以这样解读：所有的名称以get开头的方法，都将运行于一个只读事务的上下文，所有其他类型的方法遵照默认的事务语义来执行。`<tx:advice/>`标签的`transaction-manager`属性值指示了了驱动当前事务的PlatformTransactionManager事务管理器的名字，这里也就是名称为txManager的Bean。
+
+> ![Tip](http://i.imgur.com/jvUOmJI.png)如果类型为`PlatformTransactionManager`的事务管理器名字正好是`transactionManager`，你就可以省略掉`<tx:advice/>`标签内部transaction-manager属性的定义。加入`PlatformTransactionManager`这个Bean有其他的名字，你就必须按照上面的样例说明的样子，明确地的定义transaction-manager属性值。
+
+### 13.5.3 声明式事务的回滚
+
+### 13.5.4 为不同的Bean配置不同的事务语义
 
 ## 13.6 编程式事务管理
 
